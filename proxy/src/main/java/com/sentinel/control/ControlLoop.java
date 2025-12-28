@@ -20,6 +20,7 @@ public class ControlLoop {
     private final RiskPredictor riskPredictor;
     private final ModeStateMachine modeStateMachine;
     private final WeightAdjuster weightAdjuster;
+    private final CircuitBreaker circuitBreaker;
 
     private volatile Instant lastExecution;
 
@@ -44,6 +45,12 @@ public class ControlLoop {
             var riskLevel = riskPredictor.predictRisk(healthAssessments, metricsRegistry);
 
             var systemMode = modeStateMachine.determineMode(healthAssessments, riskLevel);
+
+            backends.forEach(backend -> {
+                metricsRegistry.get(backend.getId()).ifPresent(metrics -> {
+                    circuitBreaker.evaluateAndUpdate(backend, metrics);
+                });
+            });
 
             weightAdjuster.adjustWeights(backends, healthAssessments, systemMode, backendPool);
 
