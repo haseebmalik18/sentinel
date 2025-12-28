@@ -69,7 +69,7 @@ public class HealthScorer {
         double overallScore = BackendHealth.calculateOverallScore(
                 speedScore, stabilityScore, saturationScore, reliabilityScore);
 
-        BackendState state = deriveState(overallScore, metrics);
+        BackendState state = deriveStateWithRecovery(backend, overallScore, metrics);
 
         boolean latencyIncreasing = metrics.getLatencyTrend() > metrics.getP95Latency();
         boolean errorsIncreasing = metrics.getErrorRateTrend() > metrics.getErrorRate();
@@ -159,6 +159,25 @@ public class HealthScorer {
         } else {
             return BackendState.UNHEALTHY;
         }
+    }
+
+    private BackendState deriveStateWithRecovery(Backend backend, double overallScore, BackendMetrics metrics) {
+        var circuitState = backend.getCircuitState();
+        var lastStateChange = backend.getLastStateChange();
+        var now = java.time.Instant.now();
+
+        if (circuitState == com.sentinel.model.CircuitState.HALF_OPEN) {
+            return BackendState.RECOVERING;
+        }
+
+        if (circuitState == com.sentinel.model.CircuitState.CLOSED && lastStateChange != null) {
+            long secondsSinceTransition = now.getEpochSecond() - lastStateChange.getEpochSecond();
+            if (secondsSinceTransition < 30) {
+                return BackendState.RECOVERING;
+            }
+        }
+
+        return deriveState(overallScore, metrics);
     }
 
     private double calculateAverageP95(List<Backend> backends, MetricsRegistry registry) {

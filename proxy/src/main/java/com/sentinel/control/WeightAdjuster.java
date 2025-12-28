@@ -19,6 +19,7 @@ import java.util.Map;
 public class WeightAdjuster {
 
     private final int maxWeightChangePercent;
+    private final int recoveryWeightChangePercent;
     private final int minObservationPeriod;
     private final int cooldownPeriod;
 
@@ -27,9 +28,11 @@ public class WeightAdjuster {
 
     public WeightAdjuster(
             @Value("${sentinel.control.maxWeightChangePercent:10}") int maxWeightChangePercent,
+            @Value("${sentinel.control.recoveryWeightChangePercent:5}") int recoveryWeightChangePercent,
             @Value("${sentinel.control.minObservationPeriod:15}") int minObservationPeriod,
             @Value("${sentinel.control.cooldownPeriod:20}") int cooldownPeriod) {
         this.maxWeightChangePercent = maxWeightChangePercent;
+        this.recoveryWeightChangePercent = recoveryWeightChangePercent;
         this.minObservationPeriod = minObservationPeriod;
         this.cooldownPeriod = cooldownPeriod;
     }
@@ -79,8 +82,12 @@ public class WeightAdjuster {
             targetWeight = 10.0;
         }
 
-        int maxChange = (currentWeight * maxWeightChangePercent) / 100;
-        maxChange = Math.max(maxChange, 5);
+        int changePercent = health.getState() == BackendState.RECOVERING
+                ? recoveryWeightChangePercent
+                : maxWeightChangePercent;
+
+        int maxChange = (currentWeight * changePercent) / 100;
+        maxChange = Math.max(maxChange, 3);
 
         int delta = (int) (targetWeight - currentWeight);
 
