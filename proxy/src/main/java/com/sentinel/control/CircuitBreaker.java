@@ -16,24 +16,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CircuitBreaker {
 
     private final int failureThreshold;
-    private final int failureWindow;
     private final double timeoutRateThreshold;
     private final int retryDelay;
-    private final double probeRate;
 
     private final Map<String, CircuitData> circuitData = new ConcurrentHashMap<>();
 
     public CircuitBreaker(
             @Value("${sentinel.control.circuitBreaker.failureThreshold:5}") int failureThreshold,
-            @Value("${sentinel.control.circuitBreaker.failureWindow:30}") int failureWindow,
             @Value("${sentinel.control.circuitBreaker.timeoutRateThreshold:20.0}") double timeoutRateThreshold,
-            @Value("${sentinel.control.circuitBreaker.retryDelay:10}") int retryDelay,
-            @Value("${sentinel.control.circuitBreaker.probeRate:5.0}") double probeRate) {
+            @Value("${sentinel.control.circuitBreaker.retryDelay:10}") int retryDelay) {
         this.failureThreshold = failureThreshold;
-        this.failureWindow = failureWindow;
         this.timeoutRateThreshold = timeoutRateThreshold;
         this.retryDelay = retryDelay;
-        this.probeRate = probeRate;
     }
 
     public void evaluateAndUpdate(Backend backend, BackendMetrics metrics) {
@@ -77,16 +71,13 @@ public class CircuitBreaker {
         long errorCount = metrics.getErrorCount().sum();
 
         if (timeoutRate >= timeoutRateThreshold && errorCount >= failureThreshold) {
-            data.consecutiveFailures = (int) errorCount;
             return CircuitState.OPEN;
         }
 
         if (errorRate >= 50.0 && errorCount >= failureThreshold) {
-            data.consecutiveFailures = (int) errorCount;
             return CircuitState.OPEN;
         }
 
-        data.consecutiveFailures = 0;
         return CircuitState.CLOSED;
     }
 
@@ -108,7 +99,6 @@ public class CircuitBreaker {
         data.probeAttempts++;
 
         if (errorRate <= 5.0 && requestCount >= 5) {
-            data.consecutiveFailures = 0;
             return CircuitState.CLOSED;
         }
 
@@ -120,7 +110,6 @@ public class CircuitBreaker {
     }
 
     private static class CircuitData {
-        int consecutiveFailures = 0;
         int probeAttempts = 0;
         Instant lastTransition = Instant.now();
     }
