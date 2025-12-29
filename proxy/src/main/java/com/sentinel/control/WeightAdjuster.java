@@ -39,6 +39,11 @@ public class WeightAdjuster {
 
     public void adjustWeights(List<Backend> backends, Map<String, BackendHealth> healthAssessments,
                              SystemMode systemMode, BackendPool pool) {
+        adjustWeights(backends, healthAssessments, systemMode, pool, OverloadDetector.OverloadType.NONE);
+    }
+
+    public void adjustWeights(List<Backend> backends, Map<String, BackendHealth> healthAssessments,
+                             SystemMode systemMode, BackendPool pool, OverloadDetector.OverloadType overloadType) {
 
         Instant now = Instant.now();
 
@@ -58,7 +63,7 @@ public class WeightAdjuster {
             }
 
             int currentWeight = backend.getWeight();
-            int newWeight = calculateNewWeight(currentWeight, health, systemMode);
+            int newWeight = calculateNewWeight(currentWeight, health, systemMode, overloadType);
 
             if (newWeight != currentWeight) {
                 pool.updateWeight(backend.getId(), newWeight);
@@ -70,7 +75,8 @@ public class WeightAdjuster {
         }
     }
 
-    private int calculateNewWeight(int currentWeight, BackendHealth health, SystemMode mode) {
+    private int calculateNewWeight(int currentWeight, BackendHealth health, SystemMode mode,
+                                   OverloadDetector.OverloadType overloadType) {
         double targetWeight = switch (health.getState()) {
             case HEALTHY -> 100.0;
             case DEGRADED -> 70.0;
@@ -80,6 +86,18 @@ public class WeightAdjuster {
 
         if (mode == SystemMode.OVERLOADED && health.getState() == BackendState.UNHEALTHY) {
             targetWeight = 10.0;
+        }
+
+        if (overloadType == OverloadDetector.OverloadType.TRAFFIC_SPIKE && health.getState() == BackendState.HEALTHY) {
+            targetWeight = 100.0;
+        }
+
+        if (overloadType == OverloadDetector.OverloadType.COMBINED_OVERLOAD) {
+            if (health.getState() == BackendState.DEGRADED) {
+                targetWeight = 50.0;
+            } else if (health.getState() == BackendState.UNHEALTHY) {
+                targetWeight = 5.0;
+            }
         }
 
         int changePercent = health.getState() == BackendState.RECOVERING
