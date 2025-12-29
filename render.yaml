@@ -1,14 +1,11 @@
 services:
-  # Sentinel Proxy (Java Spring Boot)
+  # Sentinel Proxy (Java Spring Boot via Docker)
   - type: web
     name: sentinel-proxy
-    env: java
+    runtime: docker
     plan: free
-    buildCommand: cd proxy && mvn clean package -DskipTests
-    startCommand: java -jar proxy/target/sentinel-proxy-1.0.0-SNAPSHOT.jar
+    dockerfilePath: ./proxy/Dockerfile
     envVars:
-      - key: SERVER_PORT
-        value: 8080
       - key: BACKEND_1_URL
         fromService:
           type: web
@@ -28,15 +25,13 @@ services:
   # Backend 1 (Node.js)
   - type: web
     name: backend-1
-    env: node
+    runtime: node
     plan: free
     buildCommand: cd simulator && npm install
     startCommand: cd simulator && node server.js
     envVars:
       - key: BACKEND_ID
         value: backend-1
-      - key: BACKEND_PORT
-        value: 10000
       - key: BASE_LATENCY_MS
         value: 50
       - key: MAX_CAPACITY
@@ -45,15 +40,13 @@ services:
   # Backend 2 (Node.js)
   - type: web
     name: backend-2
-    env: node
+    runtime: node
     plan: free
     buildCommand: cd simulator && npm install
     startCommand: cd simulator && node server.js
     envVars:
       - key: BACKEND_ID
         value: backend-2
-      - key: BACKEND_PORT
-        value: 10000
       - key: BASE_LATENCY_MS
         value: 50
       - key: MAX_CAPACITY
@@ -62,15 +55,13 @@ services:
   # Backend 3 (Node.js)
   - type: web
     name: backend-3
-    env: node
+    runtime: node
     plan: free
     buildCommand: cd simulator && npm install
     startCommand: cd simulator && node server.js
     envVars:
       - key: BACKEND_ID
         value: backend-3
-      - key: BACKEND_PORT
-        value: 10000
       - key: BASE_LATENCY_MS
         value: 50
       - key: MAX_CAPACITY
