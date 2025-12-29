@@ -21,6 +21,7 @@ public class ControlLoop {
     private final ModeStateMachine modeStateMachine;
     private final WeightAdjuster weightAdjuster;
     private final CircuitBreaker circuitBreaker;
+    private final OverloadDetector overloadDetector;
 
     private volatile Instant lastExecution;
 
@@ -44,6 +45,8 @@ public class ControlLoop {
 
             var riskLevel = riskPredictor.predictRisk(healthAssessments, metricsRegistry);
 
+            var overloadType = overloadDetector.detectOverloadType(backends, healthAssessments, metricsRegistry);
+
             var systemMode = modeStateMachine.determineMode(healthAssessments, riskLevel);
 
             backends.forEach(backend -> {
@@ -52,10 +55,10 @@ public class ControlLoop {
                 });
             });
 
-            weightAdjuster.adjustWeights(backends, healthAssessments, systemMode, backendPool);
+            weightAdjuster.adjustWeights(backends, healthAssessments, systemMode, backendPool, overloadType);
 
-            log.debug("Control loop executed: mode={}, risk={}, backends={}, assessed={}",
-                    systemMode, riskLevel, backends.size(), healthAssessments.size());
+            log.debug("Control loop executed: mode={}, risk={}, overload={}, backends={}, assessed={}",
+                    systemMode, riskLevel, overloadType, backends.size(), healthAssessments.size());
 
         } catch (Exception e) {
             log.error("Control loop execution failed", e);
