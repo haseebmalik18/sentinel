@@ -1,10 +1,10 @@
-FROM eclipse-temurin:21-jdk as build
+FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /app
 
-# Copy Maven files
-COPY pom.xml .
-COPY src ./src
+# Copy Maven files from proxy directory
+COPY proxy/pom.xml .
+COPY proxy/src ./src
 
 # Build the application
 RUN apt-get update && apt-get install -y maven
