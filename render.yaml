@@ -1,0 +1,77 @@
+services:
+  # Sentinel Proxy (Java Spring Boot)
+  - type: web
+    name: sentinel-proxy
+    env: java
+    plan: free
+    buildCommand: cd proxy && mvn clean package -DskipTests
+    startCommand: java -jar proxy/target/sentinel-proxy-1.0.0-SNAPSHOT.jar
+    envVars:
+      - key: SERVER_PORT
+        value: 8080
+      - key: BACKEND_1_URL
+        fromService:
+          type: web
+          name: backend-1
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACKEND_2_URL
+        fromService:
+          type: web
+          name: backend-2
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACKEND_3_URL
+        fromService:
+          type: web
+          name: backend-3
+          envVarKey: RENDER_EXTERNAL_URL
+
+  # Backend 1 (Node.js)
+  - type: web
+    name: backend-1
+    env: node
+    plan: free
+    buildCommand: cd simulator && npm install
+    startCommand: cd simulator && node server.js
+    envVars:
+      - key: BACKEND_ID
+        value: backend-1
+      - key: BACKEND_PORT
+        value: 10000
+      - key: BASE_LATENCY_MS
+        value: 50
+      - key: MAX_CAPACITY
+        value: 50
+
+  # Backend 2 (Node.js)
+  - type: web
+    name: backend-2
+    env: node
+    plan: free
+    buildCommand: cd simulator && npm install
+    startCommand: cd simulator && node server.js
+    envVars:
+      - key: BACKEND_ID
+        value: backend-2
+      - key: BACKEND_PORT
+        value: 10000
+      - key: BASE_LATENCY_MS
+        value: 50
+      - key: MAX_CAPACITY
+        value: 50
+
+  # Backend 3 (Node.js)
+  - type: web
+    name: backend-3
+    env: node
+    plan: free
+    buildCommand: cd simulator && npm install
+    startCommand: cd simulator && node server.js
+    envVars:
+      - key: BACKEND_ID
+        value: backend-3
+      - key: BACKEND_PORT
+        value: 10000
+      - key: BASE_LATENCY_MS
+        value: 50
+      - key: MAX_CAPACITY
+        value: 50

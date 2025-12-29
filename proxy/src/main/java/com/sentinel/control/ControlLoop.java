@@ -57,7 +57,7 @@ public class ControlLoop {
 
             weightAdjuster.adjustWeights(backends, healthAssessments, systemMode, backendPool, overloadType);
 
-            log.debug("Control loop executed: mode={}, risk={}, overload={}, backends={}, assessed={}",
+            log.info("Control loop executed: mode={}, risk={}, overload={}, backends={}, assessed={}",
                     systemMode, riskLevel, overloadType, backends.size(), healthAssessments.size());
 
         } catch (Exception e) {

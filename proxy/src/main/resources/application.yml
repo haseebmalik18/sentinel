@@ -11,13 +11,13 @@ sentinel:
     # Backends to route traffic to
     backends:
       - id: backend-1
-        url: http://localhost:8081
+        url: ${BACKEND_1_URL:http://localhost:8081}
         initialWeight: 100
       - id: backend-2
-        url: http://localhost:8082
+        url: ${BACKEND_2_URL:http://localhost:8082}
         initialWeight: 100
       - id: backend-3
-        url: http://localhost:8083
+        url: ${BACKEND_3_URL:http://localhost:8083}
         initialWeight: 100
 
     # Request timeout in milliseconds
