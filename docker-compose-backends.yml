@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  backend-1:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-1
+    ports:
+      - "9001:9001"
+    environment:
+      - BACKEND_ID=backend-1
+      - BACKEND_PORT=9001
+      - BASE_LATENCY_MS=50
+      - MAX_CAPACITY=100
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend-net
+
+  backend-2:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-2
+    ports:
+      - "9002:9002"
+    environment:
+      - BACKEND_ID=backend-2
+      - BACKEND_PORT=9002
+      - BASE_LATENCY_MS=75
+      - MAX_CAPACITY=80
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend-net
+
+  backend-3:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-3
+    ports:
+      - "9003:9003"
+    environment:
+      - BACKEND_ID=backend-3
+      - BACKEND_PORT=9003
+      - BASE_LATENCY_MS=100
+      - MAX_CAPACITY=60
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend-net
+
+  backend-4:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-4
+    ports:
+      - "9004:9004"
+    environment:
+      - BACKEND_ID=backend-4
+      - BACKEND_PORT=9004
+      - BASE_LATENCY_MS=60
+      - MAX_CAPACITY=90
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend-net
+
+networks:
+  backend-net:
+    driver: bridge

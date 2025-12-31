@@ -22,6 +22,22 @@ public class BackendPool {
         log.info("Registered backend: {} at {} with weight {}", id, url, initialWeight);
     }
 
+    public void addBackend(Backend backend) {
+        backends.put(backend.getId(), backend);
+        recalculateTotalWeight();
+        log.info("Added backend: {} at {} with weight {}", backend.getId(), backend.getUrl(), backend.getWeight());
+    }
+
+    public boolean removeBackend(String id) {
+        Backend removed = backends.remove(id);
+        if (removed != null) {
+            recalculateTotalWeight();
+            log.info("Removed backend: {}", id);
+            return true;
+        }
+        return false;
+    }
+
     public Optional<Backend> getBackend(String id) {
         return Optional.ofNullable(backends.get(id));
     }

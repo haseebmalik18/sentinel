@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Activity } from 'lucide-react';
 import RequestFlow from '@/components/RequestFlow';
 import ActivityLog from '@/components/Commentary';
 
@@ -163,12 +162,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-white text-slate-900">
       <div className="border-b border-slate-200 bg-white">
         <div className="container mx-auto px-8 py-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-semibold">Sentinel</h1>
-          </div>
+          <h1 className="text-xl font-semibold">Sentinel</h1>
         </div>
       </div>
 

@@ -1,24 +1,25 @@
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
+COPY pom.xml .
+COPY src ./src
 
-# Copy Maven files from proxy directory
-COPY proxy/pom.xml .
-COPY proxy/src ./src
-
-# Build the application
-RUN apt-get update && apt-get install -y maven
+RUN apk add --no-cache maven
 RUN mvn clean package -DskipTests
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Copy the built jar from build stage
-COPY --from=build /app/target/sentinel-proxy-1.0.0-SNAPSHOT.jar app.jar
+COPY --from=builder /app/target/sentinel-proxy-1.0.0-SNAPSHOT.jar app.jar
 
-# Expose port
 EXPOSE 8080
 
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENV JAVA_OPTS="-Xms2g -Xmx4g \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=100 \
+    -XX:+ParallelRefProcEnabled \
+    -XX:+UseStringDeduplication \
+    -server"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

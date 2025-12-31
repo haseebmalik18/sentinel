@@ -6,35 +6,14 @@ spring:
     name: sentinel-proxy
 
 sentinel:
-  # Data Plane Configuration
   proxy:
-    # Backends to route traffic to
-    backends:
-      - id: backend-1
-        url: ${BACKEND_1_URL:http://localhost:8081}
-        initialWeight: 100
-      - id: backend-2
-        url: ${BACKEND_2_URL:http://localhost:8082}
-        initialWeight: 100
-      - id: backend-3
-        url: ${BACKEND_3_URL:http://localhost:8083}
-        initialWeight: 100
-
-    # Request timeout in milliseconds
+    backends: []  # Backends are added dynamically via dashboard (max 4)
     requestTimeout: 5000
-
-    # Connection pool settings
     maxConnections: 200
 
-  # Metrics Layer Configuration
   metrics:
-    # Rolling window duration in seconds
     windowDuration: 30
-
-    # Number of buckets in rolling window
     windowBuckets: 30
-
-    # Latency buckets for percentile calculation (in ms)
     latencyBuckets:
       - 10
       - 25
@@ -45,76 +24,37 @@ sentinel:
       - 1000
       - 2500
       - 5000
-
-    # EWMA smoothing factor (0-1, higher = more weight to recent)
     ewmaAlpha: 0.3
 
-  # Control Plane Configuration
   control:
-    # Control loop interval in seconds
     loopInterval: 5
-
-    # Maximum weight change per cycle (percentage)
     maxWeightChangePercent: 10
-
-    # Minimum observation period before taking action (seconds)
     minObservationPeriod: 15
-
-    # Cooldown after major weight change (seconds)
     cooldownPeriod: 20
-
-    # Risk prediction horizon (seconds)
     predictionHorizon: 30
-
-    # Health scoring thresholds
     health:
-      # Latency degradation threshold (multiplier vs average)
       latencyDegradedMultiplier: 1.5
       latencyUnhealthyMultiplier: 2.5
-
-      # Error rate thresholds (percentage)
       errorRateWarning: 5.0
       errorRateCritical: 15.0
-
-      # Variance threshold for stability (multiplier vs mean)
       varianceUnstableMultiplier: 2.0
-
-      # In-flight saturation threshold (percentage of max)
       saturationWarning: 70.0
       saturationCritical: 90.0
-
-    # Circuit breaker settings
     circuitBreaker:
-      # Failures to open circuit
       failureThreshold: 5
-
-      # Time window for failure counting (seconds)
       failureWindow: 30
-
-      # Timeout rate to trigger circuit (percentage)
       timeoutRateThreshold: 20.0
-
-      # Wait before retry after open (seconds)
       retryDelay: 10
-
-      # Slow probe rate when half-open (percentage)
       probeRate: 5.0
-
-    # Overload protection
     overload:
-      # RPS increase to consider spike (multiplier vs baseline)
       spikeMultiplier: 3.0
-
-      # Duration to maintain overload mode (seconds)
       overloadModeDuration: 60
 
-  # Dashboard WebSocket
   dashboard:
     websocket:
       path: /ws/metrics
       allowedOrigins: "*"
 
-# Actuator endpoints
 management:
   endpoints:
     web:
@@ -124,7 +64,6 @@ management:
     health:
       show-details: always
 
-# Logging
 logging:
   level:
     com.sentinel: INFO

@@ -14,6 +14,47 @@ app.use(express.json());
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+app.post('/_admin/inject-latency', (req, res) => {
+  const { latencyMs } = req.body;
+  injectedLatency = parseInt(latencyMs) || 0;
+  res.json({
+    backendId: BACKEND_ID,
+    injectedLatency,
+    totalLatency: BASE_LATENCY + injectedLatency
+  });
+});
+
+app.post('/_admin/inject-errors', (req, res) => {
+  const { errorRate } = req.body;
+  injectedErrorRate = parseFloat(errorRate) || 0;
+  res.json({
+    backendId: BACKEND_ID,
+    injectedErrorRate
+  });
+});
+
+app.get('/_admin/status', (req, res) => {
+  res.json({
+    backendId: BACKEND_ID,
+    baseLatency: BASE_LATENCY,
+    injectedLatency,
+    totalLatency: BASE_LATENCY + injectedLatency,
+    injectedErrorRate,
+    maxCapacity: MAX_CAPACITY,
+    currentConcurrent: concurrentRequests
+  });
+});
+
+app.post('/_admin/reset', (req, res) => {
+  injectedLatency = 0;
+  injectedErrorRate = 0;
+  res.json({
+    backendId: BACKEND_ID,
+    message: 'Reset to baseline',
+    baseLatency: BASE_LATENCY
+  });
+});
+
 app.all('*', async (req, res) => {
   concurrentRequests++;
 

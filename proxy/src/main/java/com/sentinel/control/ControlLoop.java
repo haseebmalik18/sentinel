@@ -2,6 +2,7 @@ package com.sentinel.control;
 
 import com.sentinel.metrics.MetricsRegistry;
 import com.sentinel.proxy.BackendPool;
+import com.sentinel.websocket.MetricsBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,6 +23,7 @@ public class ControlLoop {
     private final WeightAdjuster weightAdjuster;
     private final CircuitBreaker circuitBreaker;
     private final OverloadDetector overloadDetector;
+    private final MetricsBroadcaster metricsBroadcaster;
 
     private volatile Instant lastExecution;
 
@@ -56,6 +58,8 @@ public class ControlLoop {
             });
 
             weightAdjuster.adjustWeights(backends, healthAssessments, systemMode, backendPool, overloadType);
+
+            metricsBroadcaster.broadcastMetrics(backends, healthAssessments, systemMode, riskLevel, overloadType);
 
             log.info("Control loop executed: mode={}, risk={}, overload={}, backends={}, assessed={}",
                     systemMode, riskLevel, overloadType, backends.size(), healthAssessments.size());
