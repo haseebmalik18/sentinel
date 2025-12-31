@@ -39,7 +39,7 @@ public class RiskPredictor {
         }
 
         long degradedCount = validBackends.values().stream()
-                .filter(h -> h.getState() == BackendState.DEGRADED ||
+                .filter(h -> h.getState() == BackendState.DEGRADING ||
                              h.getState() == BackendState.UNHEALTHY)
                 .count();
 

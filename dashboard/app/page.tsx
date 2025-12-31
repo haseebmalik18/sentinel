@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import RequestFlow from '@/components/RequestFlow';
 import ActivityLog from '@/components/Commentary';
 
-type BackendState = 'HEALTHY' | 'DEGRADING' | 'UNHEALTHY' | 'CIRCUIT_OPEN';
+type BackendState = 'HEALTHY' | 'DEGRADING' | 'UNHEALTHY' | 'RECOVERING';
+type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 type SystemMode = 'STABLE' | 'DEGRADING' | 'OVERLOADED' | 'RECOVERING';
 
 interface Backend {
   id: string;
+  url: string;
   weight: number;
   state: BackendState;
+  circuitState: CircuitState;
   latency: number;
   rps: number;
   errorRate: number;
@@ -23,15 +26,27 @@ interface ActivityMessage {
   type: 'info' | 'warning' | 'error' | 'success';
 }
 
+const SENTINEL_URL = process.env.NEXT_PUBLIC_SENTINEL_HTTP_URL || 'http://localhost:8080';
+const SENTINEL_WS_URL = process.env.NEXT_PUBLIC_SENTINEL_WS_URL || 'ws://localhost:8080/ws/metrics';
+const TRAFFIC_GEN_URL = process.env.NEXT_PUBLIC_TRAFFIC_GEN_URL || 'http://localhost:9500';
+
+const BACKEND_URLS = [
+  'http://localhost:9001',
+  'http://localhost:9002',
+  'http://localhost:9003',
+  'http://localhost:9004'
+];
+
 export default function Dashboard() {
   const [systemMode, setSystemMode] = useState<SystemMode>('STABLE');
-  const [totalRps, setTotalRps] = useState(2340);
+  const [totalRps, setTotalRps] = useState(0);
+  const [targetRps, setTargetRps] = useState(0);
   const [backends, setBackends] = useState<Backend[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityMessage[]>([
     {
       id: '1',
       timestamp: Date.now(),
-      message: 'No backends configured. Add a backend to begin routing traffic.',
+      message: 'Connecting to Sentinel...',
       type: 'info'
     }
   ]);
@@ -46,116 +61,203 @@ export default function Dashboard() {
     setActivityLog(prev => [newMessage, ...prev].slice(0, 10));
   };
 
-  const handleInjectLatency = (backendId: string) => {
-    setBackends(prev => prev.map(b => {
-      if (b.id === backendId) {
-        logActivity(`Injecting latency to ${backendId} (50ms → 420ms)`, 'warning');
-        return { ...b, latency: 420, state: 'DEGRADING' };
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (targetRps > 0) {
+        fetch(`${TRAFFIC_GEN_URL}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rps: targetRps })
+        })
+          .then(() => logActivity(`Traffic generator started at ${targetRps.toLocaleString()} RPS`, 'success'))
+          .catch(() => logActivity('Failed to start traffic generator', 'error'));
+      } else if (targetRps === 0) {
+        fetch(`${TRAFFIC_GEN_URL}/stop`, { method: 'POST' })
+          .then(() => logActivity('Traffic generator stopped', 'info'))
+          .catch(() => {});
       }
-      return b;
-    }));
+    }, 500);
 
-    setTimeout(() => {
-      setBackends(prev => prev.map(b => {
-        if (b.id === backendId) {
-          logActivity(`Reducing ${backendId} weight: 100% → 85%`, 'warning');
-          return { ...b, weight: 85 };
-        }
-        return b;
-      }));
-    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [targetRps]);
 
-    setTimeout(() => {
-      setBackends(prev => prev.map(b => {
-        if (b.id === backendId) {
-          logActivity(`Further reducing ${backendId} weight: 85% → 50%`, 'warning');
-          return { ...b, weight: 50 };
-        }
-        return b;
-      }));
-      setSystemMode('DEGRADING');
-    }, 4000);
+  useEffect(() => {
+    fetchBackends();
 
-    setTimeout(() => {
-      setBackends(prev => prev.map(b => {
-        if (b.id === backendId) {
-          logActivity(`Isolating ${backendId}, weight: 50% → 20%`, 'error');
-          return { ...b, weight: 20 };
-        }
-        return b;
-      }));
-    }, 6000);
+    const ws = new WebSocket(SENTINEL_WS_URL);
+
+    ws.onopen = () => {
+      logActivity('Connected to Sentinel', 'success');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        setSystemMode(data.systemMode);
+        setTotalRps(data.systemStats.totalRps);
+
+        const updatedBackends = data.backends.map((b: any) => ({
+          id: b.id,
+          url: b.url,
+          weight: b.weight,
+          state: b.state,
+          circuitState: b.circuitState,
+          latency: b.metrics.p95Latency,
+          rps: b.metrics.requestRate,
+          errorRate: b.metrics.errorRate
+        }));
+
+        setBackends(updatedBackends);
+      } catch (err) {
+        console.error('Failed to parse WebSocket message:', err);
+      }
+    };
+
+    ws.onerror = () => {
+      logActivity('WebSocket connection failed', 'error');
+    };
+
+    ws.onclose = () => {
+      logActivity('Disconnected from Sentinel', 'warning');
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  const fetchBackends = async () => {
+    try {
+      const res = await fetch(`${SENTINEL_URL}/api/backends`);
+      const data = await res.json();
+
+      if (data.length === 0) {
+        logActivity('No backends configured', 'info');
+      }
+    } catch (err) {
+      logActivity('Failed to fetch backends', 'error');
+    }
   };
 
-  const handleInjectErrors = (backendId: string) => {
-    setBackends(prev => prev.map(b => {
-      if (b.id === backendId) {
-        logActivity(`Injecting errors to ${backendId} (error rate: 0% → 80%)`, 'error');
-        return { ...b, errorRate: 80, state: 'UNHEALTHY' };
-      }
-      return b;
-    }));
+  const handleAddBackend = async () => {
+    const nextBackendUrl = BACKEND_URLS[backends.length];
+    if (!nextBackendUrl) {
+      logActivity('Maximum 4 backends allowed', 'warning');
+      return;
+    }
 
-    setTimeout(() => {
-      setBackends(prev => prev.map(b => {
-        if (b.id === backendId) {
-          logActivity(`Circuit breaker OPEN for ${backendId}`, 'error');
-          return { ...b, state: 'CIRCUIT_OPEN', weight: 0 };
-        }
-        return b;
-      }));
-    }, 2000);
+    try {
+      const res = await fetch(`${SENTINEL_URL}/api/backends`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: nextBackendUrl })
+      });
+
+      if (res.ok) {
+        const backend = await res.json();
+        logActivity(`Added ${backend.id} to pool`, 'success');
+      } else {
+        const error = await res.json();
+        logActivity(error.error || 'Failed to add backend', 'error');
+      }
+    } catch (err) {
+      logActivity('Failed to add backend', 'error');
+    }
   };
 
-  const handleCrash = (backendId: string) => {
-    logActivity(`${backendId} crashed!`, 'error');
-    setBackends(prev => prev.map(b => {
-      if (b.id === backendId) {
-        return { ...b, state: 'CIRCUIT_OPEN', weight: 0, errorRate: 100 };
+  const handleRemoveBackend = async (backendId: string) => {
+    try {
+      const res = await fetch(`${SENTINEL_URL}/api/backends/${backendId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        logActivity(`Removed ${backendId} from pool`, 'warning');
+      } else {
+        logActivity('Failed to remove backend', 'error');
       }
-      return b;
-    }));
-    setSystemMode('DEGRADING');
+    } catch (err) {
+      logActivity('Failed to remove backend', 'error');
+    }
+  };
+
+  const getBackendAdminUrl = (backendId: string) => {
+    const backend = backends.find(b => b.id === backendId);
+    return backend?.url || '';
+  };
+
+  const handleInjectLatency = async (backendId: string) => {
+    const backendUrl = getBackendAdminUrl(backendId);
+    if (!backendUrl) return;
+
+    try {
+      await fetch(`${backendUrl}/_admin/inject-latency`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latencyMs: 300 })
+      });
+      logActivity(`Injecting 300ms latency to ${backendId}`, 'warning');
+    } catch (err) {
+      logActivity(`Failed to inject latency to ${backendId}`, 'error');
+    }
+  };
+
+  const handleInjectErrors = async (backendId: string) => {
+    const backendUrl = getBackendAdminUrl(backendId);
+    if (!backendUrl) return;
+
+    try {
+      await fetch(`${backendUrl}/_admin/inject-errors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ errorRate: 50 })
+      });
+      logActivity(`Injecting 50% error rate to ${backendId}`, 'error');
+    } catch (err) {
+      logActivity(`Failed to inject errors to ${backendId}`, 'error');
+    }
+  };
+
+  const handleCrash = async (backendId: string) => {
+    const backendUrl = getBackendAdminUrl(backendId);
+    if (!backendUrl) return;
+
+    try {
+      await fetch(`${backendUrl}/_admin/inject-errors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ errorRate: 100 })
+      });
+      logActivity(`${backendId} crashed!`, 'error');
+    } catch (err) {
+      logActivity(`Failed to crash ${backendId}`, 'error');
+    }
   };
 
   const handleTrafficSpike = (multiplier: number) => {
-    const newRps = Math.round(totalRps * multiplier);
-    logActivity(`Traffic spike detected! RPS: ${totalRps.toLocaleString()} → ${newRps.toLocaleString()} (${multiplier}x)`, 'warning');
-    setTotalRps(newRps);
-    setSystemMode('OVERLOADED');
-    setBackends(prev => prev.map(b => ({ ...b, state: 'DEGRADING' })));
-
-    setTimeout(() => {
-      logActivity('All backends saturated, entering overload protection mode', 'error');
-    }, 1000);
+    const newRps = Math.round(targetRps * multiplier);
+    setTargetRps(newRps);
   };
 
-  const handleAddBackend = () => {
-    const newId = `backend-${backends.length + 1}`;
-    logActivity(`Adding ${newId} to pool`, 'success');
-    setBackends(prev => [...prev, {
-      id: newId,
-      weight: 100,
-      state: 'HEALTHY',
-      latency: 55,
-      rps: 0,
-      errorRate: 0
-    }]);
+  const handleRpsChange = (rps: number) => {
+    setTargetRps(rps);
   };
 
-  const handleRemoveBackend = (backendId: string) => {
-    if (backends.length <= 1) return; // Don't remove last backend
-    logActivity(`Removing ${backendId} from pool`, 'warning');
-    setBackends(prev => prev.filter(b => b.id !== backendId));
-  };
+  const handleReset = async () => {
+    try {
+      setTargetRps(0);
 
-  const handleReset = () => {
-    logActivity('Resetting system to healthy state', 'success');
-    setSystemMode('STABLE');
-    setTotalRps(2340);
-    setBackends([
-      { id: 'backend-1', weight: 100, state: 'HEALTHY', latency: 50, rps: 2340, errorRate: 0.1 },
-    ]);
+      for (const backend of backends) {
+        await fetch(`${backend.url}/_admin/reset`, {
+          method: 'POST'
+        });
+      }
+
+      logActivity('Reset all backends to baseline', 'success');
+    } catch (err) {
+      logActivity('Failed to reset backends', 'error');
+    }
   };
 
   return (
@@ -179,7 +281,7 @@ export default function Dashboard() {
             onCrash={handleCrash}
             onTrafficSpike={handleTrafficSpike}
             onReset={handleReset}
-            onRpsChange={setTotalRps}
+            onRpsChange={handleRpsChange}
           />
         </div>
 

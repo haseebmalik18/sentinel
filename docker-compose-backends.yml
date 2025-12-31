@@ -85,6 +85,26 @@ services:
     networks:
       - backend-net
 
+  traffic-generator:
+    build:
+      context: ./traffic-generator
+      dockerfile: Dockerfile
+    container_name: traffic-generator
+    ports:
+      - "9500:9500"
+    environment:
+      - SENTINEL_URL=${SENTINEL_URL:-http://host.docker.internal:8080}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+    networks:
+      - backend-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 networks:
   backend-net:
     driver: bridge

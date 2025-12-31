@@ -1,15 +1,18 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useEffect, useState, useId } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Plus, X, Zap, RotateCcw, Clock, AlertCircle, XCircle } from 'lucide-react';
 
-type BackendState = 'HEALTHY' | 'DEGRADING' | 'UNHEALTHY' | 'CIRCUIT_OPEN';
+type BackendState = 'HEALTHY' | 'DEGRADING' | 'UNHEALTHY' | 'RECOVERING';
+type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 interface Backend {
   id: string;
+  url: string;
   weight: number;
   state: BackendState;
+  circuitState: CircuitState;
   latency: number;
   rps: number;
   errorRate: number;
@@ -54,7 +57,7 @@ export default function RequestFlow({
   const [latencyAmount, setLatencyAmount] = useState(420);
   const [errorRate, setErrorRate] = useState(80);
   const [spikeMultiplier, setSpikeMultiplier] = useState(3);
-  const gradientId = useId();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Update selected backend when backends change
   useEffect(() => {
@@ -62,6 +65,64 @@ export default function RequestFlow({
       setSelectedBackend(backends[0].id);
     }
   }, [backends, selectedBackend]);
+
+  // Draw gradient lines on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size to match container
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw lines for each backend
+    backends.forEach((backend, index) => {
+      const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
+      const targetY = getBackendY(index, totalSlots);
+      const opacity = backend.weight / 100;
+      const trafficIntensity = Math.min(1, totalRps / 5000);
+      const strokeWidth = Math.max(2.5, 2 + (trafficIntensity * 1.5));
+      const lineOpacity = Math.max(0.7, 0.5 + (opacity * 0.3) + (trafficIntensity * 0.15));
+
+      const startX = canvas.width * 0.25;
+      const startY = canvas.height * 0.5;
+      const endX = canvas.width * 0.75;
+      const endY = canvas.height * (targetY / 100);
+
+      // Create gradient
+      const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+      gradient.addColorStop(0, 'rgba(96, 165, 250, 0.8)'); // Blue
+      gradient.addColorStop(1, 'rgba(148, 163, 184, 0.9)'); // Slate
+
+      // Draw line
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = strokeWidth;
+      ctx.globalAlpha = lineOpacity;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Draw weight text
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#64748b';
+      ctx.font = '600 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        `${backend.weight}%`,
+        (startX + endX) / 2,
+        (startY + endY) / 2
+      );
+    });
+  }, [backends, totalRps, canAddBackend]);
 
   useEffect(() => {
     // Scale particle spawn rate with RPS
@@ -95,7 +156,7 @@ export default function RequestFlow({
 
       setTimeout(() => {
         setParticles(prev => prev.filter(p => p.id !== newParticle.id));
-      }, 3000);
+      }, 2500);
     }, baseInterval);
 
     return () => clearInterval(interval);
@@ -110,53 +171,11 @@ export default function RequestFlow({
   return (
     <div className="flex gap-4" style={{ height: '400px' }}>
       <div className="relative flex-1 overflow-hidden">
-        <svg
-          key={backends.map(b => b.id).join('-')}
+        <canvas
+          ref={canvasRef}
           className="absolute inset-0 pointer-events-none"
-          width="100%"
-          height="100%"
-          suppressHydrationWarning
-        >
-          {backends.map((backend, index) => {
-            const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
-            const targetY = getBackendY(index, totalSlots);
-            const opacity = backend.weight / 100;
-            const trafficIntensity = Math.min(1, totalRps / 5000);
-            const strokeWidth = Math.max(2.5, 2 + (trafficIntensity * 1.5));
-            const lineOpacity = Math.max(0.7, 0.5 + (opacity * 0.3) + (trafficIntensity * 0.15));
-            const uniqueGradientId = `${gradientId}-${backend.id}`;
-            return (
-              <g key={`line-${backend.id}`}>
-                <defs>
-                  <linearGradient id={uniqueGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.8" />
-                    <stop offset="100%" stopColor="#94a3b8" stopOpacity="0.9" />
-                  </linearGradient>
-                </defs>
-                <line
-                  x1="25%"
-                  y1="50%"
-                  x2="75%"
-                  y2={`${targetY}%`}
-                  stroke={`url(#${uniqueGradientId})`}
-                  strokeWidth={strokeWidth}
-                  opacity={lineOpacity}
-                  strokeLinecap="round"
-                />
-                <text
-                  x="50%"
-                  y={`${(50 + targetY) / 2}%`}
-                  fill="#64748b"
-                  fontSize="11"
-                  fontWeight="600"
-                  textAnchor="middle"
-                >
-                  {backend.weight}%
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+          style={{ width: '100%', height: '100%' }}
+        />
 
         {particles.map((particle) => {
           const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
@@ -170,12 +189,19 @@ export default function RequestFlow({
                 top: '50%',
                 boxShadow: '0 0 4px rgba(59, 130, 246, 0.3)',
               }}
-              initial={{ opacity: 0.7, scale: 1 }}
+              initial={{
+                opacity: 0.9,
+                scale: 1,
+                x: '-50%',
+                y: '-50%'
+              }}
               animate={{
                 left: '75%',
                 top: `${targetY}%`,
-                opacity: 0,
+                opacity: 0.2,
                 scale: 0.9,
+                x: '-50%',
+                y: '-50%'
               }}
               transition={{
                 duration: 2.5,
@@ -230,7 +256,8 @@ export default function RequestFlow({
                     <div className={`w-1.5 h-1.5 rounded-full ${
                       backend.state === 'HEALTHY' ? 'bg-green-400' :
                       backend.state === 'DEGRADING' ? 'bg-amber-400' :
-                      'bg-slate-300'
+                      backend.state === 'RECOVERING' ? 'bg-blue-400' :
+                      'bg-red-400'
                     }`} />
                     <div className="text-xs text-slate-500">{backend.latency}ms</div>
                   </div>

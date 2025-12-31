@@ -155,7 +155,7 @@ public class HealthScorer {
         if (overallScore >= 70.0) {
             return BackendState.HEALTHY;
         } else if (overallScore >= 40.0) {
-            return BackendState.DEGRADED;
+            return BackendState.DEGRADING;
         } else {
             return BackendState.UNHEALTHY;
         }

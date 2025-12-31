@@ -95,7 +95,7 @@ public class MetricsBroadcaster {
                 .filter(b -> b.getState() == BackendState.HEALTHY)
                 .count();
         int degradedBackends = (int) backends.stream()
-                .filter(b -> b.getState() == BackendState.DEGRADED)
+                .filter(b -> b.getState() == BackendState.DEGRADING)
                 .count();
         int unhealthyBackends = (int) backends.stream()
                 .filter(b -> b.getState() == BackendState.UNHEALTHY)

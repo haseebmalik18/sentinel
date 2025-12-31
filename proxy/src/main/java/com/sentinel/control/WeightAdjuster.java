@@ -79,7 +79,7 @@ public class WeightAdjuster {
                                    OverloadDetector.OverloadType overloadType) {
         double targetWeight = switch (health.getState()) {
             case HEALTHY -> 100.0;
-            case DEGRADED -> 70.0;
+            case DEGRADING -> 70.0;
             case UNHEALTHY -> 30.0;
             case RECOVERING -> 50.0;
         };
@@ -93,7 +93,7 @@ public class WeightAdjuster {
         }
 
         if (overloadType == OverloadDetector.OverloadType.COMBINED_OVERLOAD) {
-            if (health.getState() == BackendState.DEGRADED) {
+            if (health.getState() == BackendState.DEGRADING) {
                 targetWeight = 50.0;
             } else if (health.getState() == BackendState.UNHEALTHY) {
                 targetWeight = 5.0;
