@@ -13,20 +13,24 @@ public class BackendMetrics {
     private final RollingWindow requestCount;
     private final RollingWindow errorCount;
     private final RollingWindow timeoutCount;
-    private final LatencyHistogram latencyHistogram;
+    private final RollingHistogram latencyHistogram;
     private final EWMACalculator latencyEWMA;
     private final EWMACalculator errorRateEWMA;
     private final AtomicLong inflightRequests = new AtomicLong(0);
     private volatile Instant lastUpdate;
 
-    private final long[] latencyBuckets = {10, 25, 50, 100, 250, 500, 1000, 2500, 5000};
+    private final long[] latencyBuckets = {
+        5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100,
+        120, 140, 160, 180, 200, 225, 250, 300,
+        400, 500, 600, 700, 800, 900, 1000, 1200, 1500, 2000, 3000, 5000, 10000
+    };
 
     public BackendMetrics(String backendId, int windowDuration, int numBuckets, double ewmaAlpha) {
         this.backendId = backendId;
         this.requestCount = new RollingWindow(windowDuration, numBuckets);
         this.errorCount = new RollingWindow(windowDuration, numBuckets);
         this.timeoutCount = new RollingWindow(windowDuration, numBuckets);
-        this.latencyHistogram = new LatencyHistogram(latencyBuckets);
+        this.latencyHistogram = new RollingHistogram(windowDuration, numBuckets, latencyBuckets);
         this.latencyEWMA = new EWMACalculator(ewmaAlpha);
         this.errorRateEWMA = new EWMACalculator(ewmaAlpha);
         this.lastUpdate = Instant.now();
