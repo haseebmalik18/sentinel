@@ -71,6 +71,9 @@ public class HealthScorer {
 
         BackendState state = deriveStateWithRecovery(backend, overallScore, metrics);
 
+        log.debug("Backend {}: speed={}, stability={}, saturation={}, reliability={}, overall={}, state={}",
+                  backend.getId(), speedScore, stabilityScore, saturationScore, reliabilityScore, overallScore, state);
+
         boolean latencyIncreasing = metrics.getLatencyTrend() > metrics.getP95Latency();
         boolean errorsIncreasing = metrics.getErrorRateTrend() > metrics.getErrorRate();
         boolean saturationIncreasing = metrics.getInflightCount() > 0;
@@ -91,11 +94,19 @@ public class HealthScorer {
 
     private double calculateSpeedScore(BackendMetrics metrics, double avgP95) {
         long p95 = metrics.getP95Latency();
-        if (avgP95 == 0 || p95 == 0) {
+
+        if (p95 == 0) {
+            log.debug("Backend {} has p95=0, returning degraded score", metrics.getBackendId());
+            return 30.0;
+        }
+
+        if (avgP95 == 0) {
             return 100.0;
         }
 
         double ratio = p95 / avgP95;
+        log.debug("Backend {}: p95={}ms, avgP95={}ms, ratio={}",
+                  metrics.getBackendId(), p95, avgP95, ratio);
 
         if (ratio <= 1.0) {
             return 100.0;
@@ -152,7 +163,7 @@ public class HealthScorer {
     }
 
     private BackendState deriveState(double overallScore, BackendMetrics metrics) {
-        if (overallScore >= 70.0) {
+        if (overallScore >= 75.0) {
             return BackendState.HEALTHY;
         } else if (overallScore >= 40.0) {
             return BackendState.DEGRADING;
@@ -163,18 +174,9 @@ public class HealthScorer {
 
     private BackendState deriveStateWithRecovery(Backend backend, double overallScore, BackendMetrics metrics) {
         var circuitState = backend.getCircuitState();
-        var lastStateChange = backend.getLastStateChange();
-        var now = java.time.Instant.now();
 
         if (circuitState == com.sentinel.model.CircuitState.HALF_OPEN) {
             return BackendState.RECOVERING;
-        }
-
-        if (circuitState == com.sentinel.model.CircuitState.CLOSED && lastStateChange != null) {
-            long secondsSinceTransition = now.getEpochSecond() - lastStateChange.getEpochSecond();
-            if (secondsSinceTransition < 30) {
-                return BackendState.RECOVERING;
-            }
         }
 
         return deriveState(overallScore, metrics);
