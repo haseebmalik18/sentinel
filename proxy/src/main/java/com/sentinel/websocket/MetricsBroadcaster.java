@@ -30,6 +30,14 @@ public class MetricsBroadcaster {
             RiskLevel riskLevel,
             OverloadType overloadType
     ) {
+        int activeConnections = webSocketHandler.getActiveConnections();
+        if (activeConnections == 0) {
+            log.debug("No active WebSocket connections, skipping broadcast");
+            return;
+        }
+
+        log.debug("Broadcasting to {} active WebSocket connections", activeConnections);
+
         try {
             var backendSnapshots = backends.stream()
                     .map(backend -> {
