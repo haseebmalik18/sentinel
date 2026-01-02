@@ -20,7 +20,7 @@ public class BackendHealth {
 
     public static double calculateOverallScore(double speed, double stability,
                                                double saturation, double reliability) {
-        return (speed + stability + saturation + reliability) / 4.0;
+        return (speed * 0.4) + (stability * 0.1) + (saturation * 0.2) + (reliability * 0.3);
     }
 
     public boolean isDegrading() {

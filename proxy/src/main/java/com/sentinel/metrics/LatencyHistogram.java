@@ -70,6 +70,14 @@ public class LatencyHistogram {
         }
     }
 
+    public long[] getCounts() {
+        long[] result = new long[counts.length()];
+        for (int i = 0; i < counts.length(); i++) {
+            result[i] = counts.get(i);
+        }
+        return result;
+    }
+
     private int findBucketIndex(long latencyMs) {
         for (int i = 0; i < bucketBounds.length; i++) {
             if (latencyMs <= bucketBounds[i]) {

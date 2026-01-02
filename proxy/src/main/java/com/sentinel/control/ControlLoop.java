@@ -41,7 +41,11 @@ public class ControlLoop {
             var healthAssessments = healthScorer.scoreAllBackends(backends, metricsRegistry);
 
             if (healthAssessments.isEmpty()) {
-                log.debug("No health assessments available yet");
+                log.warn("No health assessments available yet for {} backends, broadcasting anyway", backends.size());
+                metricsBroadcaster.broadcastMetrics(backends, healthAssessments,
+                    com.sentinel.model.SystemMode.STABLE,
+                    RiskLevel.LOW,
+                    OverloadDetector.OverloadType.NONE);
                 return;
             }
 
