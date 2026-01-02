@@ -12,13 +12,17 @@ sentinel:
     maxConnections: 200
 
   metrics:
-    windowDuration: 30
-    windowBuckets: 30
+    windowDuration: 20
+    windowBuckets: 20
     latencyBuckets:
       - 10
       - 25
       - 50
+      - 75
       - 100
+      - 125
+      - 150
+      - 200
       - 250
       - 500
       - 1000
@@ -31,6 +35,7 @@ sentinel:
     maxWeightChangePercent: 10
     minObservationPeriod: 15
     cooldownPeriod: 20
+    sustainedDegradationCycles: 3
     predictionHorizon: 30
     health:
       latencyDegradedMultiplier: 1.5
@@ -42,7 +47,7 @@ sentinel:
       saturationCritical: 90.0
     circuitBreaker:
       failureThreshold: 5
-      failureWindow: 30
+      failureWindow: 20
       timeoutRateThreshold: 20.0
       retryDelay: 10
       probeRate: 5.0
@@ -66,7 +71,7 @@ management:
 
 logging:
   level:
-    com.sentinel: INFO
+    com.sentinel: DEBUG
     org.springframework: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
