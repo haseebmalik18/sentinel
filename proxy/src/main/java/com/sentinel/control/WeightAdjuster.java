@@ -22,19 +22,24 @@ public class WeightAdjuster {
     private final int recoveryWeightChangePercent;
     private final int minObservationPeriod;
     private final int cooldownPeriod;
+    private final int sustainedDegradationCycles;
 
     private final Map<String, Instant> lastAdjustment = new HashMap<>();
     private final Map<String, Instant> observationStart = new HashMap<>();
+    private final Map<String, Integer> degradationCycleCount = new HashMap<>();
+    private final Map<String, BackendState> lastState = new HashMap<>();
 
     public WeightAdjuster(
             @Value("${sentinel.control.maxWeightChangePercent:10}") int maxWeightChangePercent,
             @Value("${sentinel.control.recoveryWeightChangePercent:5}") int recoveryWeightChangePercent,
             @Value("${sentinel.control.minObservationPeriod:15}") int minObservationPeriod,
-            @Value("${sentinel.control.cooldownPeriod:20}") int cooldownPeriod) {
+            @Value("${sentinel.control.cooldownPeriod:20}") int cooldownPeriod,
+            @Value("${sentinel.control.sustainedDegradationCycles:3}") int sustainedDegradationCycles) {
         this.maxWeightChangePercent = maxWeightChangePercent;
         this.recoveryWeightChangePercent = recoveryWeightChangePercent;
         this.minObservationPeriod = minObservationPeriod;
         this.cooldownPeriod = cooldownPeriod;
+        this.sustainedDegradationCycles = sustainedDegradationCycles;
     }
 
     public void adjustWeights(List<Backend> backends, Map<String, BackendHealth> healthAssessments,
@@ -51,19 +56,46 @@ public class WeightAdjuster {
             BackendHealth health = healthAssessments.get(backend.getId());
             if (health == null) {
                 observationStart.putIfAbsent(backend.getId(), now);
+                log.debug("Skipping {}: no health assessment yet", backend.getId());
                 continue;
             }
 
             if (!hasMinObservationPeriod(backend.getId(), now)) {
+                log.debug("Skipping {}: min observation period not met", backend.getId());
                 continue;
             }
 
             if (isInCooldown(backend.getId(), now)) {
+                log.debug("Skipping {}: in cooldown", backend.getId());
                 continue;
             }
 
+            BackendState currentState = health.getState();
+            boolean isDegraded = (currentState == BackendState.DEGRADING || currentState == BackendState.UNHEALTHY);
+
+            if (isDegraded) {
+                int count = degradationCycleCount.getOrDefault(backend.getId(), 0) + 1;
+                degradationCycleCount.put(backend.getId(), count);
+                log.debug("Backend {}: degradation cycle {}/{}", backend.getId(), count, sustainedDegradationCycles);
+            } else if (currentState == BackendState.HEALTHY) {
+                degradationCycleCount.put(backend.getId(), 0);
+            }
+            lastState.put(backend.getId(), currentState);
+
             int currentWeight = backend.getWeight();
             int newWeight = calculateNewWeight(currentWeight, health, systemMode, overloadType);
+
+            log.debug("Backend {}: health={}, currentWeight={}, newWeight={}",
+                      backend.getId(), health.getState(), currentWeight, newWeight);
+
+            if (newWeight < currentWeight) {
+                int cycleCount = degradationCycleCount.getOrDefault(backend.getId(), 0);
+                if (cycleCount < sustainedDegradationCycles) {
+                    log.debug("Skipping {}: degradation not sustained ({}/{} cycles)",
+                              backend.getId(), cycleCount, sustainedDegradationCycles);
+                    continue;
+                }
+            }
 
             if (newWeight != currentWeight) {
                 pool.updateWeight(backend.getId(), newWeight);
