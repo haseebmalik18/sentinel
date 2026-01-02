@@ -39,10 +39,16 @@ export default function BackendCard({ backend }: BackendCardProps) {
             <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
               <div
                 className="bg-slate-900 h-full transition-all duration-500"
-                style={{ width: `${backend.weight}%` }}
+                style={{ width: `${backend.circuitState === 'OPEN' ? 0 : backend.weight}%` }}
               />
             </div>
-            <span className="text-xl font-semibold text-slate-900">{backend.weight}%</span>
+            <span className="text-xl font-semibold text-slate-900">
+              {backend.circuitState === 'OPEN' ? (
+                <span className="text-red-600">0%</span>
+              ) : (
+                `${backend.weight}%`
+              )}
+            </span>
           </div>
         </div>
 
