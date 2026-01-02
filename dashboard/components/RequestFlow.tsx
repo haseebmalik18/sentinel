@@ -4,6 +4,18 @@ import { motion } from 'framer-motion';
 import { useEffect, useState, useRef } from 'react';
 import { Plus, X, Zap, RotateCcw, Clock, AlertCircle, XCircle } from 'lucide-react';
 
+const LATENCY_BUCKETS = [
+  5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100,
+  120, 140, 160, 180, 200, 225, 250, 300,
+  400, 500, 600, 700, 800, 900, 1000, 1200, 1500, 2000, 3000, 5000, 10000
+];
+
+function snapToNearestBucket(value: number): number {
+  return LATENCY_BUCKETS.reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  );
+}
+
 type BackendState = 'HEALTHY' | 'DEGRADING' | 'UNHEALTHY' | 'RECOVERING';
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
@@ -16,6 +28,7 @@ interface Backend {
   latency: number;
   rps: number;
   errorRate: number;
+  healthScore: number;
 }
 
 interface RequestFlowProps {
@@ -24,8 +37,8 @@ interface RequestFlowProps {
   onAddBackend: () => void;
   canAddBackend: boolean;
   onRemoveBackend: (backendId: string) => void;
-  onInjectLatency: (backendId: string) => void;
-  onInjectErrors: (backendId: string) => void;
+  onInjectLatency: (backendId: string, latencyMs: number) => void;
+  onInjectErrors: (backendId: string, errorRate: number) => void;
   onCrash: (backendId: string) => void;
   onTrafficSpike: (multiplier: number) => void;
   onReset: () => void;
@@ -54,19 +67,51 @@ export default function RequestFlow({
   const [hoveredBackend, setHoveredBackend] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedBackend, setSelectedBackend] = useState<string>('');
-  const [latencyAmount, setLatencyAmount] = useState(420);
+  const [latencyAmount, setLatencyAmount] = useState(400);
   const [errorRate, setErrorRate] = useState(80);
   const [spikeMultiplier, setSpikeMultiplier] = useState(3);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [positions, setPositions] = useState({ sentinelX: 20, backendX: 75 });
 
-  // Update selected backend when backends change
+  useEffect(() => {
+    const updatePositions = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !canvas.parentElement) return;
+
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const sentinelBox = canvas.parentElement.querySelector('[data-sentinel-box]');
+      const backendElements = canvas.parentElement.querySelectorAll('[data-backend-card]');
+
+      let sentinelRightX = rect.width * 0.20;
+      if (sentinelBox) {
+        const sentinelRect = sentinelBox.getBoundingClientRect();
+        sentinelRightX = sentinelRect.right - rect.left;
+      }
+
+      let backendLeftX = rect.width * 0.75;
+      if (backendElements && backendElements.length > 0) {
+        const firstBackend = backendElements[0].getBoundingClientRect();
+        backendLeftX = firstBackend.left - rect.left;
+      }
+
+      setPositions({
+        sentinelX: (sentinelRightX / rect.width) * 100,
+        backendX: (backendLeftX / rect.width) * 100
+      });
+    };
+
+    setParticles([]);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(updatePositions);
+    });
+  }, [isPanelOpen, backends]);
+
   useEffect(() => {
     if (backends.length > 0 && !backends.find(b => b.id === selectedBackend)) {
       setSelectedBackend(backends[0].id);
     }
   }, [backends, selectedBackend]);
 
-  // Draw gradient lines on canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -74,90 +119,138 @@ export default function RequestFlow({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size to match container
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const drawCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      ctx.scale(dpr, dpr);
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, rect.width, rect.height);
 
-    // Draw lines for each backend
-    backends.forEach((backend, index) => {
-      const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
-      const targetY = getBackendY(index, totalSlots);
-      const opacity = backend.weight / 100;
-      const trafficIntensity = Math.min(1, totalRps / 5000);
-      const strokeWidth = Math.max(2.5, 2 + (trafficIntensity * 1.5));
-      const lineOpacity = Math.max(0.7, 0.5 + (opacity * 0.3) + (trafficIntensity * 0.15));
+      const sentinelBox = canvas.parentElement?.querySelector('[data-sentinel-box]');
+      const backendElements = canvas.parentElement?.querySelectorAll('[data-backend-card]');
 
-      const startX = canvas.width * 0.25;
-      const startY = canvas.height * 0.5;
-      const endX = canvas.width * 0.75;
-      const endY = canvas.height * (targetY / 100);
+      let sentinelRightX = rect.width * 0.20; // fallback
+      let sentinelCenterY = rect.height * 0.5; // fallback
 
-      // Create gradient
-      const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
-      gradient.addColorStop(0, 'rgba(96, 165, 250, 0.8)'); // Blue
-      gradient.addColorStop(1, 'rgba(148, 163, 184, 0.9)'); // Slate
-
-      // Draw line
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = strokeWidth;
-      ctx.globalAlpha = lineOpacity;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-
-      // Draw weight text
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#64748b';
-      ctx.font = '600 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        `${backend.weight}%`,
-        (startX + endX) / 2,
-        (startY + endY) / 2
-      );
-    });
-  }, [backends, totalRps, canAddBackend]);
-
-  useEffect(() => {
-    // Scale particle spawn rate with RPS
-    // At 100 RPS: ~800ms interval
-    // At 2340 RPS: ~300ms interval
-    // At 10000 RPS: ~100ms interval
-    const baseInterval = Math.max(100, Math.min(800, 50000 / totalRps));
-
-    const interval = setInterval(() => {
-      const totalWeight = backends.reduce((sum, b) => sum + b.weight, 0);
-      if (totalWeight === 0) return;
-
-      const random = Math.random() * totalWeight;
-      let cumulative = 0;
-      let targetIndex = 0;
-
-      for (let i = 0; i < backends.length; i++) {
-        cumulative += backends[i].weight;
-        if (random <= cumulative) {
-          targetIndex = i;
-          break;
-        }
+      if (sentinelBox) {
+        const sentinelRect = sentinelBox.getBoundingClientRect();
+        sentinelRightX = (sentinelRect.right - rect.left);
+        sentinelCenterY = (sentinelRect.top + sentinelRect.height / 2) - rect.top;
       }
 
-      const newParticle: Particle = {
-        id: `${Date.now()}-${Math.random()}`,
-        targetIndex,
-      };
+      setPositions({
+        sentinelX: (sentinelRightX / rect.width) * 100,
+        backendX: rect.width > 0 && backendElements && backendElements.length > 0
+          ? ((backendElements[0].getBoundingClientRect().left - rect.left) / rect.width) * 100
+          : 75
+      });
 
-      setParticles(prev => [...prev, newParticle]);
+      let backendLeftPosition = rect.width * 0.75; // fallback
 
-      setTimeout(() => {
-        setParticles(prev => prev.filter(p => p.id !== newParticle.id));
-      }, 2500);
-    }, baseInterval);
+      if (backendElements && backendElements.length > 0) {
+        const firstBackend = backendElements[0].getBoundingClientRect();
+        backendLeftPosition = firstBackend.left - rect.left;
+      }
+
+      const startX = sentinelRightX;
+      const startY = sentinelCenterY;
+
+      backends.forEach((backend, index) => {
+        const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
+        const targetY = getBackendY(index, totalSlots);
+        const opacity = backend.weight / 100;
+        const trafficIntensity = Math.min(1, totalRps / 5000);
+        const strokeWidth = Math.max(2.5, 2 + (trafficIntensity * 1.5));
+        const lineOpacity = Math.max(0.7, 0.5 + (opacity * 0.3) + (trafficIntensity * 0.15));
+
+        const endX = backendLeftPosition; // Use actual backend position
+        const endY = rect.height * (targetY / 100);
+
+        const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+        gradient.addColorStop(0, 'rgba(96, 165, 250, 0.8)'); // Blue
+        gradient.addColorStop(1, 'rgba(148, 163, 184, 0.9)'); // Slate
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = strokeWidth;
+        ctx.globalAlpha = lineOpacity;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#64748b';
+        ctx.font = '600 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          `${backend.weight}%`,
+          (startX + endX) / 2,
+          (startY + endY) / 2
+        );
+      });
+    };
+
+    drawCanvas();
+
+    const resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(drawCanvas);
+    });
+
+    resizeObserver.observe(canvas.parentElement!);
+
+    return () => resizeObserver.disconnect();
+  }, [backends, totalRps, canAddBackend, isPanelOpen]);
+
+  useEffect(() => {
+    if (totalRps < 10 || backends.length === 0) {
+      setParticles([]); // Clear existing particles
+      return;
+    }
+
+    const MAX_PARTICLES = 50;
+    const PARTICLE_LIFETIME = 1200; // Fixed lifetime in ms
+
+    const targetSpawnRate = MAX_PARTICLES / (PARTICLE_LIFETIME / 1000); // particles per second
+    const TICK_INTERVAL = 1000 / targetSpawnRate; // ms between spawns
+
+    const interval = setInterval(() => {
+      setParticles(prev => {
+        if (prev.length >= MAX_PARTICLES) {
+          return prev;
+        }
+
+        const totalWeight = backends.reduce((sum, b) => sum + b.weight, 0);
+        if (totalWeight === 0) return prev;
+
+        const random = Math.random() * totalWeight;
+        let cumulative = 0;
+        let targetIndex = 0;
+
+        for (let j = 0; j < backends.length; j++) {
+          cumulative += backends[j].weight;
+          if (random <= cumulative) {
+            targetIndex = j;
+            break;
+          }
+        }
+
+        const newParticle: Particle = {
+          id: `${Date.now()}-${Math.random()}`,
+          targetIndex,
+        };
+
+        setTimeout(() => {
+          setParticles(prev => prev.filter(p => p.id !== newParticle.id));
+        }, PARTICLE_LIFETIME);
+
+        return [...prev, newParticle];
+      });
+    }, TICK_INTERVAL);
 
     return () => clearInterval(interval);
   }, [backends, totalRps]);
@@ -180,31 +273,32 @@ export default function RequestFlow({
         {particles.map((particle) => {
           const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
           const targetY = getBackendY(particle.targetIndex, totalSlots);
+          const animDuration = 1.2;
           return (
             <motion.div
               key={particle.id}
               className="absolute w-1.5 h-1.5 rounded-full bg-blue-400"
               style={{
-                left: '25%',
+                left: `${positions.sentinelX}%`,
                 top: '50%',
                 boxShadow: '0 0 4px rgba(59, 130, 246, 0.3)',
               }}
               initial={{
                 opacity: 0.9,
                 scale: 1,
-                x: '-50%',
+                x: '0%',
                 y: '-50%'
               }}
               animate={{
-                left: '75%',
+                left: `${positions.backendX}%`,
                 top: `${targetY}%`,
                 opacity: 0.2,
                 scale: 0.9,
-                x: '-50%',
+                x: '0%',
                 y: '-50%'
               }}
               transition={{
-                duration: 2.5,
+                duration: animDuration,
                 ease: [0.16, 1, 0.3, 1],
               }}
             />
@@ -213,6 +307,7 @@ export default function RequestFlow({
 
         <motion.div
           className="absolute left-[20%] top-1/2 -translate-x-1/2 -translate-y-1/2"
+          data-sentinel-box
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -223,6 +318,20 @@ export default function RequestFlow({
               <div className="text-xs text-slate-400 font-medium mb-1">Proxy</div>
               <div className="text-base font-semibold text-slate-900">Sentinel</div>
               <div className="text-xs text-blue-600 font-medium mt-1">{totalRps.toLocaleString()} req/s</div>
+              {(() => {
+                const totalBackendRps = backends.reduce((sum, b) => sum + b.rps, 0);
+                const totalSuccessfulRps = backends.reduce((sum, b) =>
+                  sum + (b.rps * (1 - b.errorRate / 100)), 0
+                );
+                const fulfillmentRate = totalBackendRps > 0 ? (totalSuccessfulRps / totalBackendRps) * 100 : 100;
+                const rateColor = fulfillmentRate >= 95 ? 'text-green-600' :
+                                 fulfillmentRate >= 90 ? 'text-amber-600' : 'text-red-600';
+                return (
+                  <div className={`text-xs font-medium mt-1 ${rateColor}`}>
+                    ✓ {fulfillmentRate.toFixed(1)}%
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </motion.div>
@@ -235,6 +344,7 @@ export default function RequestFlow({
             <motion.div
               key={backend.id}
               className="absolute left-[75%] -translate-y-1/2 cursor-pointer"
+              data-backend-card
               initial={{ opacity: 0, scale: 0.96, top: `${targetY}%` }}
               animate={{
                 opacity: 1,
@@ -254,26 +364,30 @@ export default function RequestFlow({
                   <div className="text-sm font-semibold text-slate-900">{backend.id}</div>
                   <div className="flex items-center justify-center gap-2 mt-1.5">
                     <div className={`w-1.5 h-1.5 rounded-full ${
-                      backend.state === 'HEALTHY' ? 'bg-green-400' :
-                      backend.state === 'DEGRADING' ? 'bg-amber-400' :
                       backend.state === 'RECOVERING' ? 'bg-blue-400' :
-                      'bg-red-400'
+                      backend.healthScore > 0 ? (
+                        backend.healthScore >= 75 ? 'bg-green-400' :
+                        backend.healthScore >= 40 ? 'bg-amber-400' :
+                        'bg-red-400'
+                      ) : (
+                        backend.state === 'HEALTHY' ? 'bg-green-400' :
+                        backend.state === 'DEGRADING' ? 'bg-amber-400' :
+                        'bg-red-400'
+                      )
                     }`} />
                     <div className="text-xs text-slate-500">{backend.latency}ms</div>
                   </div>
                 </div>
-                {backends.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveBackend(backend.id);
-                    }}
-                    className="absolute top-1 right-1 w-4 h-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
-                    title="Remove backend"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveBackend(backend.id);
+                  }}
+                  className="absolute top-1 right-1 w-4 h-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
+                  title="Remove backend"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
 
               {isHovered && (
@@ -281,7 +395,15 @@ export default function RequestFlow({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-300">Weight</span>
-                      <span className="font-semibold">{backend.weight}%</span>
+                      <span className="font-semibold">
+                        {backend.circuitState === 'OPEN' ? (
+                          <span className="text-red-400">{backend.weight}% → 0% (Circuit Open)</span>
+                        ) : backend.circuitState === 'HALF_OPEN' ? (
+                          <span className="text-amber-400">{backend.weight}% (Testing)</span>
+                        ) : (
+                          `${backend.weight}%`
+                        )}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-300">RPS</span>
@@ -389,15 +511,15 @@ export default function RequestFlow({
                   </div>
                   <input
                     type="range"
-                    min="50"
+                    min="5"
                     max="2000"
-                    step="50"
+                    step="1"
                     value={latencyAmount}
-                    onChange={(e) => setLatencyAmount(Number(e.target.value))}
+                    onChange={(e) => setLatencyAmount(snapToNearestBucket(Number(e.target.value)))}
                     className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
                   />
                   <button
-                    onClick={() => onInjectLatency(selectedBackend)}
+                    onClick={() => onInjectLatency(selectedBackend, latencyAmount)}
                     disabled={!selectedBackend}
                     className="w-full mt-2 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-500"
                   >
@@ -421,7 +543,7 @@ export default function RequestFlow({
                     className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
                   />
                   <button
-                    onClick={() => onInjectErrors(selectedBackend)}
+                    onClick={() => onInjectErrors(selectedBackend, errorRate)}
                     disabled={!selectedBackend}
                     className="w-full mt-2 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-500"
                   >
@@ -464,13 +586,19 @@ export default function RequestFlow({
                   </div>
                   <input
                     type="range"
-                    min="100"
-                    max="10000"
-                    step="100"
+                    min="0"
+                    max="1000"
+                    step="50"
                     value={totalRps}
                     onChange={(e) => onRpsChange(Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    disabled={backends.length === 0}
+                    className={`w-full h-1.5 bg-slate-200 rounded-lg appearance-none ${
+                      backends.length === 0 ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
+                    } accent-blue-500`}
                   />
+                  {backends.length === 0 && (
+                    <p className="text-xs text-slate-500 mt-1">Add backends to enable traffic</p>
+                  )}
                 </div>
 
                 <button
