@@ -3,12 +3,24 @@ const app = express();
 
 const BACKEND_ID = process.env.BACKEND_ID || 'backend-unknown';
 const PORT = process.env.PORT || process.env.BACKEND_PORT || 10000;
-const BASE_LATENCY = parseInt(process.env.BASE_LATENCY_MS || '50');
-const MAX_CAPACITY = parseInt(process.env.MAX_CAPACITY || '50');
+const BASE_LATENCY = parseInt(process.env.BASE_LATENCY_MS || '0');
 
 let injectedLatency = 0;
 let injectedErrorRate = 0;
 let concurrentRequests = 0;
+
+// CORS middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
 
 app.use(express.json());
 
@@ -40,7 +52,6 @@ app.get('/_admin/status', (req, res) => {
     injectedLatency,
     totalLatency: BASE_LATENCY + injectedLatency,
     injectedErrorRate,
-    maxCapacity: MAX_CAPACITY,
     currentConcurrent: concurrentRequests
   });
 });
@@ -58,31 +69,8 @@ app.post('/_admin/reset', (req, res) => {
 app.all('*', async (req, res) => {
   concurrentRequests++;
 
-  const loadPercent = (concurrentRequests / MAX_CAPACITY) * 100;
-
-  if (concurrentRequests > MAX_CAPACITY) {
-    concurrentRequests--;
-    return res.status(503).json({
-      backendId: BACKEND_ID,
-      error: 'Service Unavailable - Over Capacity',
-      capacity: MAX_CAPACITY,
-      concurrent: concurrentRequests,
-      timestamp: new Date().toISOString()
-    });
-  }
-
   let latency = BASE_LATENCY + injectedLatency;
   let errorRate = injectedErrorRate;
-
-  if (loadPercent > 60) {
-    const saturation = loadPercent - 60;
-    latency += saturation * 3;
-  }
-
-  if (loadPercent > 80) {
-    const pressure = loadPercent - 80;
-    errorRate += pressure * 1.5;
-  }
 
   try {
     await sleep(latency);
@@ -92,7 +80,6 @@ app.all('*', async (req, res) => {
       return res.status(500).json({
         backendId: BACKEND_ID,
         error: 'Internal Server Error',
-        loadPercent: Math.round(loadPercent),
         timestamp: new Date().toISOString()
       });
     }
@@ -104,7 +91,6 @@ app.all('*', async (req, res) => {
       method: req.method,
       latencyMs: Math.round(latency),
       concurrent: concurrentRequests,
-      loadPercent: Math.round(loadPercent),
       timestamp: new Date().toISOString(),
       message: 'Success'
     });
@@ -120,5 +106,5 @@ app.all('*', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Backend ${BACKEND_ID} listening on port ${PORT}`);
-  console.log(`Base latency: ${BASE_LATENCY}ms, Max capacity: ${MAX_CAPACITY} concurrent`);
+  console.log(`Base latency: ${BASE_LATENCY}ms`);
 });

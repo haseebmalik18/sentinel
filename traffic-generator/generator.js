@@ -4,10 +4,25 @@ const http = require('http');
 const https = require('https');
 
 const app = express();
+
+// CORS middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 9500;
 const SENTINEL_URL = process.env.SENTINEL_URL || 'http://localhost:8080';
+const MAX_RPS = parseInt(process.env.MAX_RPS || '50000');
 
 const httpAgent = new http.Agent({
   keepAlive: true,
@@ -119,8 +134,10 @@ function startTraffic(rps) {
   targetRps = rps;
   stats.startTime = Date.now();
 
-  const intervalMs = 1000 / Math.min(rps, 1000);
-  const requestsPerInterval = Math.max(1, Math.floor(rps / 1000));
+  // Use fixed 5ms interval for better accuracy
+  // Calculate how many requests to send per 5ms tick
+  const intervalMs = 5;
+  const requestsPerInterval = Math.max(1, Math.round(rps / 200));
 
   const intervalId = setInterval(() => {
     if (!isRunning) {
@@ -135,7 +152,7 @@ function startTraffic(rps) {
 
   intervalIds.push(intervalId);
 
-  console.log(`Traffic generator started: ${rps} RPS`);
+  console.log(`Traffic generator started: ${rps} RPS (${requestsPerInterval} req per ${intervalMs}ms)`);
 }
 
 function stopTraffic() {
@@ -152,9 +169,9 @@ function stopTraffic() {
 app.post('/start', (req, res) => {
   const { rps } = req.body;
 
-  if (!rps || rps <= 0 || rps > 50000) {
+  if (!rps || rps <= 0 || rps > MAX_RPS) {
     return res.status(400).json({
-      error: 'RPS must be between 1 and 50000'
+      error: `RPS must be between 1 and ${MAX_RPS}`
     });
   }
 
@@ -214,6 +231,7 @@ app.get('/health', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Traffic generator listening on port ${PORT}`);
   console.log(`Target: ${SENTINEL_URL}`);
+  console.log(`Max RPS: ${MAX_RPS.toLocaleString()}`);
 });
 
 process.on('SIGTERM', () => {
