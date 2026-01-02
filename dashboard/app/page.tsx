@@ -17,6 +17,7 @@ interface Backend {
   latency: number;
   rps: number;
   errorRate: number;
+  healthScore: number;
 }
 
 interface ActivityMessage {
@@ -27,20 +28,21 @@ interface ActivityMessage {
 }
 
 const SENTINEL_URL = process.env.NEXT_PUBLIC_SENTINEL_HTTP_URL || 'http://localhost:8080';
-const SENTINEL_WS_URL = process.env.NEXT_PUBLIC_SENTINEL_WS_URL || 'ws://localhost:8080/ws/metrics';
+const SENTINEL_WS_URL = process.env.NEXT_PUBLIC_SENTINEL_WS_URL || 'ws://localhost:8080/websocket/metrics';
 const TRAFFIC_GEN_URL = process.env.NEXT_PUBLIC_TRAFFIC_GEN_URL || 'http://localhost:9500';
 
 const BACKEND_URLS = [
-  'http://localhost:9001',
-  'http://localhost:9002',
-  'http://localhost:9003',
-  'http://localhost:9004'
+  'http://backend-1:9001',
+  'http://backend-2:9002',
+  'http://backend-3:9003',
+  'http://backend-4:9004'
 ];
 
 export default function Dashboard() {
   const [systemMode, setSystemMode] = useState<SystemMode>('STABLE');
   const [totalRps, setTotalRps] = useState(0);
   const [targetRps, setTargetRps] = useState(0);
+  const [sliderRps, setSliderRps] = useState(0);
   const [backends, setBackends] = useState<Backend[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityMessage[]>([
     {
@@ -76,7 +78,7 @@ export default function Dashboard() {
           .then(() => logActivity('Traffic generator stopped', 'info'))
           .catch(() => {});
       }
-    }, 500);
+    }, 200);
 
     return () => clearTimeout(timeout);
   }, [targetRps]);
@@ -97,16 +99,19 @@ export default function Dashboard() {
         setSystemMode(data.systemMode);
         setTotalRps(data.systemStats.totalRps);
 
-        const updatedBackends = data.backends.map((b: any) => ({
-          id: b.id,
-          url: b.url,
-          weight: b.weight,
-          state: b.state,
-          circuitState: b.circuitState,
-          latency: b.metrics.p95Latency,
-          rps: b.metrics.requestRate,
-          errorRate: b.metrics.errorRate
-        }));
+        const updatedBackends = data.backends
+          .map((b: any) => ({
+            id: b.id,
+            url: b.url,
+            weight: b.weight,
+            state: b.state,
+            circuitState: b.circuitState,
+            latency: b.metrics.p95Latency,
+            rps: b.metrics.requestRate,
+            errorRate: b.metrics.errorRate,
+            healthScore: b.healthScore || 0
+          }))
+          .sort((a: any, b: any) => a.id.localeCompare(b.id));
 
         setBackends(updatedBackends);
       } catch (err) {
@@ -184,10 +189,16 @@ export default function Dashboard() {
 
   const getBackendAdminUrl = (backendId: string) => {
     const backend = backends.find(b => b.id === backendId);
-    return backend?.url || '';
+    if (!backend?.url) return '';
+
+    return backend.url
+      .replace('http://backend-1:9001', 'http://localhost:9001')
+      .replace('http://backend-2:9002', 'http://localhost:9002')
+      .replace('http://backend-3:9003', 'http://localhost:9003')
+      .replace('http://backend-4:9004', 'http://localhost:9004');
   };
 
-  const handleInjectLatency = async (backendId: string) => {
+  const handleInjectLatency = async (backendId: string, latencyMs: number) => {
     const backendUrl = getBackendAdminUrl(backendId);
     if (!backendUrl) return;
 
@@ -195,15 +206,15 @@ export default function Dashboard() {
       await fetch(`${backendUrl}/_admin/inject-latency`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latencyMs: 300 })
+        body: JSON.stringify({ latencyMs })
       });
-      logActivity(`Injecting 300ms latency to ${backendId}`, 'warning');
+      logActivity(`Injecting ${latencyMs}ms latency to ${backendId}`, 'warning');
     } catch (err) {
       logActivity(`Failed to inject latency to ${backendId}`, 'error');
     }
   };
 
-  const handleInjectErrors = async (backendId: string) => {
+  const handleInjectErrors = async (backendId: string, errorRate: number) => {
     const backendUrl = getBackendAdminUrl(backendId);
     if (!backendUrl) return;
 
@@ -211,9 +222,9 @@ export default function Dashboard() {
       await fetch(`${backendUrl}/_admin/inject-errors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ errorRate: 50 })
+        body: JSON.stringify({ errorRate })
       });
-      logActivity(`Injecting 50% error rate to ${backendId}`, 'error');
+      logActivity(`Injecting ${errorRate}% error rate to ${backendId}`, 'error');
     } catch (err) {
       logActivity(`Failed to inject errors to ${backendId}`, 'error');
     }
@@ -237,24 +248,29 @@ export default function Dashboard() {
 
   const handleTrafficSpike = (multiplier: number) => {
     const newRps = Math.round(targetRps * multiplier);
+    setSliderRps(newRps);
     setTargetRps(newRps);
   };
 
   const handleRpsChange = (rps: number) => {
+    setSliderRps(rps);
     setTargetRps(rps);
   };
 
   const handleReset = async () => {
     try {
+      setSliderRps(0);
       setTargetRps(0);
 
-      for (const backend of backends) {
-        await fetch(`${backend.url}/_admin/reset`, {
-          method: 'POST'
-        });
-      }
+      const res = await fetch(`${SENTINEL_URL}/api/backends/reset`, {
+        method: 'POST'
+      });
 
-      logActivity('Reset all backends to baseline', 'success');
+      if (res.ok) {
+        logActivity('Reset all backends to baseline', 'success');
+      } else {
+        logActivity('Failed to reset backends', 'error');
+      }
     } catch (err) {
       logActivity('Failed to reset backends', 'error');
     }
@@ -272,7 +288,7 @@ export default function Dashboard() {
         <div className="bg-slate-50 rounded-xl border border-slate-200 p-8 mb-8">
           <RequestFlow
             backends={backends}
-            totalRps={totalRps}
+            totalRps={sliderRps || totalRps}
             onAddBackend={handleAddBackend}
             canAddBackend={backends.length < 4}
             onRemoveBackend={handleRemoveBackend}
