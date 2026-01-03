@@ -1,0 +1,58 @@
+version: '3.8'
+
+networks:
+  backend-net:
+    driver: bridge
+
+services:
+  backend-1:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    ports:
+      - "9001:9001"
+    environment:
+      - PORT=9001
+      - BACKEND_ID=backend-1
+    networks:
+      - backend-net
+    restart: unless-stopped
+
+  backend-2:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    ports:
+      - "9002:9002"
+    environment:
+      - PORT=9002
+      - BACKEND_ID=backend-2
+    networks:
+      - backend-net
+    restart: unless-stopped
+
+  backend-3:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    ports:
+      - "9003:9003"
+    environment:
+      - PORT=9003
+      - BACKEND_ID=backend-3
+    networks:
+      - backend-net
+    restart: unless-stopped
+
+  backend-4:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    ports:
+      - "9004:9004"
+    environment:
+      - PORT=9004
+      - BACKEND_ID=backend-4
+    networks:
+      - backend-net
+    restart: unless-stopped

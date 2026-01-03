@@ -18,6 +18,7 @@ interface Backend {
   rps: number;
   errorRate: number;
   healthScore: number;
+  rampUpPercentage: number;
 }
 
 interface ActivityMessage {
@@ -109,7 +110,8 @@ export default function Dashboard() {
             latency: b.metrics.p95Latency,
             rps: b.metrics.requestRate,
             errorRate: b.metrics.errorRate,
-            healthScore: b.healthScore || 0
+            healthScore: b.healthScore || 0,
+            rampUpPercentage: b.rampUpPercentage || 100
           }))
           .sort((a: any, b: any) => a.id.localeCompare(b.id));
 

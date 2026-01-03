@@ -33,7 +33,7 @@ public class RequestRouter {
 
     private Optional<Backend> weightedRandomSelection(List<Backend> backends) {
         int totalWeight = backends.stream()
-                .mapToInt(Backend::getWeight)
+                .mapToInt(Backend::getEffectiveWeight)
                 .sum();
 
         if (totalWeight == 0) {
@@ -44,7 +44,7 @@ public class RequestRouter {
         int currentSum = 0;
 
         for (Backend backend : backends) {
-            currentSum += backend.getWeight();
+            currentSum += backend.getEffectiveWeight();
             if (random < currentSum) {
                 return Optional.of(backend);
             }

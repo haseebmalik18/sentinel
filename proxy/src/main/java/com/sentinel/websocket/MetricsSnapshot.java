@@ -30,6 +30,7 @@ public class MetricsSnapshot {
         CircuitState circuitState;
         MetricsData metrics;
         double healthScore;
+        int rampUpPercentage;
     }
 
     @Value

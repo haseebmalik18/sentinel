@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  traffic-generator:
+    build:
+      context: ./traffic-generator
+      dockerfile: Dockerfile
+    ports:
+      - "9500:9500"
+    environment:
+      - SENTINEL_URL=${SENTINEL_URL:-http://localhost:8080}
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_SENTINEL_HTTP_URL=${SENTINEL_HTTP_URL:-http://localhost:8080}
+      - NEXT_PUBLIC_SENTINEL_WS_URL=${SENTINEL_WS_URL:-ws://localhost:8080/websocket/metrics}
+      - NEXT_PUBLIC_TRAFFIC_GEN_URL=http://localhost:9500
+      - NEXT_PUBLIC_MAX_RPS=${MAX_RPS:-25000}
+    restart: unless-stopped
+    depends_on:
+      - traffic-generator

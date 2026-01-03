@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  sentinel-proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: sentinel-proxy
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_OPTS=-Xms512m -Xmx1g
+    networks:
+      - sentinel-net
+
+  backend-1:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-1
+    ports:
+      - "9001:9001"
+    environment:
+      - BACKEND_ID=backend-1
+      - BACKEND_PORT=9001
+      - BASE_LATENCY_MS=0
+    networks:
+      - sentinel-net
+
+  backend-2:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-2
+    ports:
+      - "9002:9002"
+    environment:
+      - BACKEND_ID=backend-2
+      - BACKEND_PORT=9002
+      - BASE_LATENCY_MS=0
+    networks:
+      - sentinel-net
+
+  backend-3:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-3
+    ports:
+      - "9003:9003"
+    environment:
+      - BACKEND_ID=backend-3
+      - BACKEND_PORT=9003
+      - BASE_LATENCY_MS=0
+    networks:
+      - sentinel-net
+
+  backend-4:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: backend-4
+    ports:
+      - "9004:9004"
+    environment:
+      - BACKEND_ID=backend-4
+      - BACKEND_PORT=9004
+      - BASE_LATENCY_MS=0
+    networks:
+      - sentinel-net
+
+  traffic-generator:
+    build:
+      context: ./traffic-generator
+      dockerfile: Dockerfile
+    container_name: traffic-generator
+    ports:
+      - "9500:9500"
+    environment:
+      - SENTINEL_URL=http://sentinel-proxy:8080
+      - MAX_RPS=1000
+    networks:
+      - sentinel-net
+
+networks:
+  sentinel-net:
+    driver: bridge

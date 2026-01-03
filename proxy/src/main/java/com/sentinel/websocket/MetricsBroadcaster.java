@@ -72,6 +72,7 @@ public class MetricsBroadcaster {
                                 .circuitState(backend.getCircuitState())
                                 .metrics(metricsData)
                                 .healthScore(health != null ? health.getOverallScore() : 0.0)
+                                .rampUpPercentage(backend.getRampUpPercentage())
                                 .build();
                     })
                     .toList();

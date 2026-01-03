@@ -10,6 +10,10 @@ const LATENCY_BUCKETS = [
   400, 500, 600, 700, 800, 900, 1000, 1200, 1500, 2000, 3000, 5000, 10000
 ];
 
+const MAX_RPS = typeof window !== 'undefined'
+  ? parseInt(process.env.NEXT_PUBLIC_MAX_RPS || '10000')
+  : 10000;
+
 function snapToNearestBucket(value: number): number {
   return LATENCY_BUCKETS.reduce((prev, curr) =>
     Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
@@ -29,6 +33,7 @@ interface Backend {
   rps: number;
   errorRate: number;
   healthScore: number;
+  rampUpPercentage: number;
 }
 
 interface RequestFlowProps {
@@ -163,7 +168,7 @@ export default function RequestFlow({
         const totalSlots = canAddBackend ? backends.length + 1 : backends.length;
         const targetY = getBackendY(index, totalSlots);
         const opacity = backend.weight / 100;
-        const trafficIntensity = Math.min(1, totalRps / 5000);
+        const trafficIntensity = Math.min(1, totalRps / (MAX_RPS * 0.5));
         const strokeWidth = Math.max(2.5, 2 + (trafficIntensity * 1.5));
         const lineOpacity = Math.max(0.7, 0.5 + (opacity * 0.3) + (trafficIntensity * 0.15));
 
@@ -224,7 +229,13 @@ export default function RequestFlow({
           return prev;
         }
 
-        const totalWeight = backends.reduce((sum, b) => sum + b.weight, 0);
+        const getEffectiveWeight = (backend: Backend) => {
+          if (backend.circuitState === 'OPEN') return 0;
+          if (backend.circuitState === 'HALF_OPEN') return backend.weight * 0.05;
+          return backend.weight * (backend.rampUpPercentage / 100);
+        };
+
+        const totalWeight = backends.reduce((sum, b) => sum + getEffectiveWeight(b), 0);
         if (totalWeight === 0) return prev;
 
         const random = Math.random() * totalWeight;
@@ -232,7 +243,7 @@ export default function RequestFlow({
         let targetIndex = 0;
 
         for (let j = 0; j < backends.length; j++) {
-          cumulative += backends[j].weight;
+          cumulative += getEffectiveWeight(backends[j]);
           if (random <= cumulative) {
             targetIndex = j;
             break;
@@ -400,6 +411,8 @@ export default function RequestFlow({
                           <span className="text-red-400">{backend.weight}% → 0% (Circuit Open)</span>
                         ) : backend.circuitState === 'HALF_OPEN' ? (
                           <span className="text-amber-400">{backend.weight}% (Testing)</span>
+                        ) : backend.rampUpPercentage < 100 ? (
+                          <span className="text-blue-400">{backend.weight}% → {Math.ceil(backend.weight * backend.rampUpPercentage / 100)}% (Ramping {backend.rampUpPercentage}%)</span>
                         ) : (
                           `${backend.weight}%`
                         )}
@@ -587,8 +600,8 @@ export default function RequestFlow({
                   <input
                     type="range"
                     min="0"
-                    max="1000"
-                    step="50"
+                    max={MAX_RPS}
+                    step={MAX_RPS >= 10000 ? 500 : 50}
                     value={totalRps}
                     onChange={(e) => onRpsChange(Number(e.target.value))}
                     disabled={backends.length === 0}
