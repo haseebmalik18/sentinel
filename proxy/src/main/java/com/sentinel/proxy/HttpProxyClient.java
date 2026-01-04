@@ -13,6 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Component
@@ -21,11 +22,18 @@ public class HttpProxyClient {
     private final HttpClient httpClient;
     private final long requestTimeoutMs;
 
-    public HttpProxyClient(@Value("${sentinel.proxy.requestTimeout:5000}") long requestTimeoutMs) {
+    public HttpProxyClient(
+            @Value("${sentinel.proxy.requestTimeout:5000}") long requestTimeoutMs,
+            @Value("${sentinel.proxy.maxConnections:2000}") int maxConnections) {
         this.requestTimeoutMs = requestTimeoutMs;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(requestTimeoutMs))
+                .version(HttpClient.Version.HTTP_1_1)
+                .executor(Executors.newFixedThreadPool(maxConnections))
                 .build();
+
+        log.info("HttpProxyClient initialized with {} max connections, {}ms timeout",
+                maxConnections, requestTimeoutMs);
     }
 
     public ProxyResult forwardRequest(Backend backend, String path, String method, String body) {

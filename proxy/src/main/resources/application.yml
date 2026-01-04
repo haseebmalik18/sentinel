@@ -1,15 +1,33 @@
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: 2000
+      min-spare: 200
+    accept-count: 1000
+    max-connections: 10000
+    connection-timeout: 20000
+  compression:
+    enabled: true
+    min-response-size: 1024
 
 spring:
   application:
     name: sentinel-proxy
+  task:
+    execution:
+      pool:
+        core-size: 100
+        max-size: 2000
+        queue-capacity: 10000
+        keep-alive: 60s
+      thread-name-prefix: sentinel-task-
 
 sentinel:
   proxy:
-    backends: []  # Backends are added dynamically via dashboard (max 4)
+    backends: []
     requestTimeout: 5000
-    maxConnections: 200
+    maxConnections: 2000
 
   metrics:
     windowDuration: 20
@@ -73,7 +91,9 @@ management:
 
 logging:
   level:
-    com.sentinel: DEBUG
+    com.sentinel: INFO
+    com.sentinel.control: DEBUG
     org.springframework: WARN
+    org.apache.tomcat: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n"

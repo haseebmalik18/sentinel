@@ -9,7 +9,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - JAVA_OPTS=-Xms512m -Xmx1g
+      - JAVA_OPTS=-Xms2g -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseStringDeduplication -XX:G1HeapRegionSize=16m -XX:InitiatingHeapOccupancyPercent=45 -XX:+ParallelRefProcEnabled -XX:+AlwaysPreTouch
     networks:
       - sentinel-net
 
@@ -78,7 +78,7 @@ services:
       - "9500:9500"
     environment:
       - SENTINEL_URL=http://sentinel-proxy:8080
-      - MAX_RPS=1000
+      - MAX_RPS=25000
     networks:
       - sentinel-net
 

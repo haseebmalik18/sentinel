@@ -22,20 +22,20 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 9500;
 const SENTINEL_URL = process.env.SENTINEL_URL || 'http://localhost:8080';
-const MAX_RPS = parseInt(process.env.MAX_RPS || '50000');
+const MAX_RPS = parseInt(process.env.MAX_RPS || '25000');
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 1000,
-  maxFreeSockets: 256,
+  maxSockets: 2000,
+  maxFreeSockets: 512,
   timeout: 60000,
   keepAliveMsecs: 1000
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 1000,
-  maxFreeSockets: 256,
+  maxSockets: 2000,
+  maxFreeSockets: 512,
   timeout: 60000,
   keepAliveMsecs: 1000
 });

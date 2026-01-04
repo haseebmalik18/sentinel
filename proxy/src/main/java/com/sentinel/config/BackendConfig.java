@@ -37,7 +37,7 @@ public class BackendConfig {
     public static class ProxyProperties {
         private List<BackendDefinition> backends;
         private long requestTimeout = 5000;
-        private int maxConnections = 200;
+        private int maxConnections = 2000;
     }
 
     @Data
