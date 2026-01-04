@@ -3,7 +3,7 @@ version: '3.8'
 services:
   sentinel-proxy:
     build:
-      context: ./proxy
+      context: ../proxy
       dockerfile: Dockerfile
     container_name: sentinel-proxy
     ports:
@@ -15,7 +15,7 @@ services:
 
   backend-1:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     container_name: backend-1
     ports:
@@ -29,7 +29,7 @@ services:
 
   backend-2:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     container_name: backend-2
     ports:
@@ -43,7 +43,7 @@ services:
 
   backend-3:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     container_name: backend-3
     ports:
@@ -57,7 +57,7 @@ services:
 
   backend-4:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     container_name: backend-4
     ports:
@@ -71,7 +71,7 @@ services:
 
   traffic-generator:
     build:
-      context: ./traffic-generator
+      context: ../traffic-generator
       dockerfile: Dockerfile
     container_name: traffic-generator
     ports:

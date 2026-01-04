@@ -7,7 +7,7 @@ networks:
 services:
   backend-1:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     ports:
       - "9001:9001"
@@ -20,7 +20,7 @@ services:
 
   backend-2:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     ports:
       - "9002:9002"
@@ -33,7 +33,7 @@ services:
 
   backend-3:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     ports:
       - "9003:9003"
@@ -46,7 +46,7 @@ services:
 
   backend-4:
     build:
-      context: ./simulator
+      context: ../simulator
       dockerfile: Dockerfile
     ports:
       - "9004:9004"

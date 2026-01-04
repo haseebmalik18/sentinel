@@ -3,7 +3,7 @@ version: '3.8'
 services:
   traffic-generator:
     build:
-      context: ./traffic-generator
+      context: ../traffic-generator
       dockerfile: Dockerfile
     ports:
       - "9500:9500"
@@ -13,7 +13,7 @@ services:
 
   dashboard:
     build:
-      context: ./dashboard
+      context: ../dashboard
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
